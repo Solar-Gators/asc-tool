@@ -3,6 +3,7 @@
 <h4 align="center"><b>Run simulations and optimize for American Solar Challenge</b></h4>
 
 <p align="center">
+
 <a href="https://github.com/Solar-Gators/asc-tool/blob/main/LICENSE" target="_blank">
 <img src="https://img.shields.io/github/license/Solar-Gators/asc-tool?style=flat-square" alt="licence" />
 </a>
@@ -15,9 +16,6 @@
 <img src="https://img.shields.io/github/issues-pr/Solar-Gators/asc-tool?style=flat-square" alt="pull-requests"/>
 </a>
 
-<a href="https://github.com/prettier/prettier" target="_blank">
-<img src="https://img.shields.io/badge/code_style-prettier-ff69b4.svg?style=flat-square" alt="prettier"/>
-</a>
 </p>
   
 ## Planned UI
