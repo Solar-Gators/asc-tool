@@ -13,5 +13,5 @@ change the code everywhere GetTraffic() is used. This also allows us to use defa
 */
 type TrafficDataOptions struct {
 	// Amount of time to wait before fetching new traffic data from API
-	refreshRateSeconds float64
+	RefreshRateSeconds float64
 }

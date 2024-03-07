@@ -5,44 +5,44 @@ This type exists to prevent latitude and longitude from being accidentally switc
 as some external APIs put longitude before latitude.
 */
 type Coordinates struct {
-	lat, lon float64
+	Latitude, Longitude float64
 }
 
 type RouteSection struct {
-	speedLimitMph      uint
-	lengthFt           float64
-	elevationInitialFt float64
-	elevationFinalFt   float64
-	coordinatesInitial Coordinates
-	coordinatesFinal   Coordinates
+	SpeedLimitMph      uint
+	LengthFt           float64
+	ElevationInitialFt float64
+	ElevationFinalFt   float64
+	CoordinatesInitial Coordinates
+	CoordinatesFinal   Coordinates
 	// Instructions are actions such as "turn right on Main Street", stc
-	exitInstruction string
-	instructionCode int // Based on OpenRouteService instruction codes
-	next            *RouteSection
-	positionInRoute int
+	ExitInstruction string
+	InstructionCode int // Based on OpenRouteService instruction codes
+	Next            *RouteSection
+	PositionInRoute int
 }
 
 type Route struct {
-	sections []RouteSection
-	isLoop   bool
+	Sections []RouteSection
+	IsLoop   bool
 }
 
 type Weather struct {
-	solarInclinationAngleDegrees float64
-	airTemperatureDegreesF       float64
-	cloudCover                   float64
-	windSpeedMph                 float64
-	rainOnGroundInches           float64
+	SolarInclinationAngleDegrees float64
+	AirTemperatureDegreesF       float64
+	CloudCover                   float64
+	WindSpeedMph                 float64
+	RainOnGroundInches           float64
 }
 
 type Traffic struct {
-	flowSpeedMph float64
+	FlowSpeedMph float64
 }
 
 // TODO: Add units
 type Vehicle struct {
-	solarPanelPower     float64
-	dragCoefficient     float64
-	accelerationCurve   []float64
-	tirePressureInitial float64
+	SolarPanelPower     float64
+	DragCoefficient     float64
+	AccelerationCurve   []float64
+	TirePressureInitial float64
 }

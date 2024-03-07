@@ -13,5 +13,5 @@ change the code everywhere GetWeather() is used. This also allows us to use defa
 */
 type WeatherDataOptions struct {
 	// Amount of time to wait before fetching new weather data from API
-	refreshRateSeconds float64
+	RefreshRateSeconds float64
 }
