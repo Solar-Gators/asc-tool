@@ -3,12 +3,14 @@ package dataaccess
 import "asc-simulation/types"
 
 /*
-Creates a route file (which is just a .json file) from a .gpx file.
-Parses coordinate and elevation data from the .gpx file, calls third-party APIs to get
-other data, and writes all of that data to a route file.
-This should not be called during a simulation!
+Creates route files (which is just a .json file) from a .gpx file.
+Each route in the .gpx file will be written to a separate .json file in
+the output folder.
+
+This function should not be called during a simulation!
+It calls external APIs to get additional route data.
 */
-func CreateRoute(inputGpxFilePath string, outputRouteFilePath string) error {
+func CreateRoutes(inputGpxFilePath string, outputFolder string) error {
 	// Parse GPX file
 	// Call APIs to get supplementary data
 	// Feed coordinate and elevation data into RouteSections struct
