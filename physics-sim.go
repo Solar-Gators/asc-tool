@@ -1,14 +1,5 @@
 package main
 
-import (
-	"fmt"
-)
-
-// physics sim should be main program
-func main() {
-	fmt.Println(CallApi("mas"))
-}
-
 func calculatePath(routePath string, currBatt uint8, targetSpeed uint8,
 	loop1Count uint8, Loop2Count uint8,
 	closeTimeStrings ...string,
