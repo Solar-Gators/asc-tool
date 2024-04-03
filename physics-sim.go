@@ -6,11 +6,18 @@ import (
 	"io"
 	"os"
 
+	"github.com/joho/godotenv"
 	"github.com/tkrajina/gpxgo/gpx"
 )
 
 // physics sim should be main program
 func main() {
+	err := godotenv.Load() // Load environment variables
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
 	// fmt.Println(CallApi("maps"))
 
 	file, err := os.Open("ASC-2022-Reference-Route-V2.gpx")
