@@ -11,7 +11,7 @@ import (
 )
 
 // physics sim should be main program
-func main() {
+func main1() {
 	err := godotenv.Load() // Load environment variables
 	if err != nil {
 		fmt.Println(err)
