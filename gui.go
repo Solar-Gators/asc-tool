@@ -7,6 +7,7 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
+	"os/exec"
 )
 
 func main() {
@@ -89,6 +90,15 @@ func main() {
 			stage_finish_time,
 		),
 		widget.NewButton("Go", func() {
+			cmd := exec.Command("./asc-simulation", "calc", route_segment.Selected, starting_battery.Text, max_speed_mph.Text, loop_1_count.Text, loop_2_count.Text, checkpoint_1_time.Text, checkpoint_2_time.Text, checkpoint_3_time.Text, stage_finish_time.Text)
+			output, err := cmd.CombinedOutput()
+
+			if err != nil {
+				fmt.Printf("Error executing command: %s\n", err)
+				return
+			}
+
+			fmt.Printf("Output: %s\n", output)
 		}),
 	))
 
