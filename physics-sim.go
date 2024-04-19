@@ -26,7 +26,7 @@ func ftToMeters(ft float64) float64 {
 	return ft * 0.3048
 }
 
-func calculateBearing(start Coordinate, end Coordinate) float64 {
+func calculateBearing(start Coordinates, end Coordinates) float64 {
 	lat1 := start.Latitude
 	lon1 := start.Longitude
 	lat2 := end.Latitude
@@ -38,7 +38,7 @@ func calculateBearing(start Coordinate, end Coordinate) float64 {
 	bearing := math.Atan2(y, x)
 
 	//normalize from [0-2pi]
-	bearing = (bearing + 2*math.Pi) % (2 * math.Pi)
+	bearing = math.Mod(bearing+2*math.Pi, 2*math.Pi)
 	return bearing
 }
 
@@ -136,6 +136,10 @@ func outputGraph(inputArr plotter.XYs, fileName string) {
 func calcPhysics(routeName string, battery int, targSpeed int, loopOne int, loopTwo int, cpOneClose string, cpTwoClose string, cpThreeClose string, stageClose string) {
 	//TODO: currently no way to account for checkpoints. As they are provided day of maybe we could take an input parameter as to the position or distance along route of the checkpoint and manage from there?
 
+	maxBatteryCapW := 10000 //TODO: get real number
+
+	currBattery := float64(maxBatteryCapW*battery) * 0.01
+
 	vehicle, err := dataaccess.GetVehicle("vehicle.json")
 	if err != nil {
 		panic(err)
@@ -164,7 +168,7 @@ func calcPhysics(routeName string, battery int, targSpeed int, loopOne int, loop
 
 	prevVelo := initialVelo
 	var totalEnergyUsed = 0.0
-	var maxAccel, minAccel, maxVelo, minVelo, maxCentripetal float64 = math.Inf(-1), math.Inf(1), math.Inf(-1), targSpeedMps, math.Inf(-1)
+	var maxAccel, minAccel, maxVelo, minVelo float64 = math.Inf(-1), math.Inf(1), math.Inf(-1), targSpeedMps
 
 	for index, section := range route.Sections {
 		weather, err := dataaccess.GetWeather(section, dataaccess.WeatherDataOptions{RefreshRateSeconds: 60}) //TODO implement weather condition calculations
@@ -199,14 +203,18 @@ func calcPhysics(routeName string, battery int, targSpeed int, loopOne int, loop
 			var currentTickEnergy = CalculateWorkDone(currentTickVelo, stepDistance, sectionSlope, prevVelo, facingDirectionRadians)
 			totalEnergyUsed += currentTickEnergy
 
+			currBattery -= currentTickEnergy
+
 			//energy gain from sun
 			solarEnergySqM := SolarConstant * math.Cos(weather.SolarInclinationAngleDegrees) * stepDistance   // TODO include cloud coverage
 			solarEnergyGain := min(solarEnergySqM*CellSize*float64(Cells)*CellEfficiency, 430*float64(Cells)) //430 is the maximum energy output per solar cell
 
+			currBattery += solarEnergyGain
+
 			//TODO:Graph Output
 		}
 
-		if battery <= 0 {
+		if currBattery <= 0 {
 			fmt.Println("Battery is dead at section", index)
 			break
 		}
