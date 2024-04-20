@@ -209,9 +209,9 @@ func getWeatherCacheSection(section *types.RouteSection, options *WeatherDataOpt
 			cacheSection = currSection
 			break
 		} else if section.PositionInRoute < currSection.startSectionIndex {
-			right = mid
+			right = mid - 1
 		} else if section.PositionInRoute > currSection.endSectionIndex {
-			left = mid
+			left = mid + 1
 		}
 	}
 	if cacheSection == nil {
