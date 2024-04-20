@@ -43,6 +43,7 @@ type RouteSection struct {
 	ExitInstruction string
 	InstructionCode RouteInstruction // Based on OpenRouteService instruction codes
 	Next            *RouteSection    `json:"-"`
+	Route           *Route           `json:"-"`
 	PositionInRoute int
 }
 
@@ -53,11 +54,14 @@ type Route struct {
 }
 
 type Weather struct {
-	SolarInclinationAngleDegrees float64
-	AirTemperatureDegreesF       float64
-	CloudCover                   float64
-	WindSpeedMph                 float64
-	RainOnGroundInches           float64
+	SolarZenithDegrees   float64
+	AirTempDegreesF      float64
+	CloudCoverPercentage float64
+	WindSpeedMph         float64
+	// 0 degrees is North, 90 degrees is East
+	WindDirectionDegrees        float64
+	RainOnGroundInches          float64
+	SurfacePressureUnknownUnits float64 // TODO: add units
 }
 
 type Traffic struct {
@@ -66,8 +70,12 @@ type Traffic struct {
 
 // TODO: Add units
 type Vehicle struct {
-	SolarPanelPower     float64
-	DragCoefficient     float64
-	AccelerationCurve   []float64
-	TirePressureInitial float64
+	SolarPanelPowerWatts     float64
+	DragCoefficient          float64
+	AccelerationCurve        []float64
+	TirePressureInitialPsi   float64 // remove?
+	WheelCircumferenceInches float64
+	BatteryCapacityMilliamps float64
+	CellCount                int
+	CellEfficiency           float64
 }

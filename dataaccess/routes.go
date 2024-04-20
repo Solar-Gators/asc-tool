@@ -7,6 +7,7 @@ import (
 	"errors"
 	"math"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/tkrajina/gpxgo/gpx"
@@ -34,10 +35,24 @@ func CreateRoutes(inputGpxFilePath string, outputFolder string) []error {
 	var errs []error
 
 	for _, route := range gpxFile.Routes {
-		createdRoute, err := createRouteFromGpx(&route)
+		createdRoute, err := createRouteFromGpxRoute(&route)
 		if err != nil {
 			newErr := errors.Join(
 				errors.New("could not get route data for route \""+route.Name+"\""),
+				err,
+			)
+			errs = append(errs, newErr)
+			continue
+		}
+
+		routes = append(routes, *createdRoute)
+	}
+
+	for _, track := range gpxFile.Tracks {
+		createdRoute, err := createRouteFromGpxTrack(&track)
+		if err != nil {
+			newErr := errors.Join(
+				errors.New("could not get route data for route \""+track.Name+"\""),
 				err,
 			)
 			errs = append(errs, newErr)
@@ -79,16 +94,40 @@ func FindAndCreateRoute(routeName string, inputGpxFilePath, outputFolder string)
 			break
 		}
 	}
-	if gpxRoute == nil {
+
+	var gpxTrack *gpx.GPXTrack = nil
+	for _, track := range gpxFile.Tracks {
+		if gpxRoute != nil {
+			break
+		}
+		if routeName == track.Name {
+			gpxTrack = &track
+			break
+		}
+	}
+
+	if gpxRoute == nil && gpxTrack == nil {
 		return errors.New("route not found in .gpx file")
 	}
 
-	createdRoute, err := createRouteFromGpx(gpxRoute)
-	if err != nil {
-		return errors.Join(
-			errors.New("could not get route data for route \""+gpxRoute.Name+"\""),
-			err,
-		)
+	var createdRoute *types.Route = nil
+	if gpxRoute != nil {
+		createdRoute, err = createRouteFromGpxRoute(gpxRoute)
+		if err != nil {
+			return errors.Join(
+				errors.New("could not get route data for route \""+gpxRoute.Name+"\""),
+				err,
+			)
+		}
+	}
+	if gpxTrack != nil {
+		createdRoute, err = createRouteFromGpxTrack(gpxTrack)
+		if err != nil {
+			return errors.Join(
+				errors.New("could not get route data for route \""+gpxTrack.Name+"\""),
+				err,
+			)
+		}
 	}
 
 	err = writeRouteToFile(createdRoute, outputFolder)
@@ -124,11 +163,12 @@ func LoadRoute(routeFilePath string) (*types.Route, error) {
 		return nil, errors.Join(functionErrMsg, err)
 	}
 
-	for i, section := range route.Sections {
+	for i := range route.Sections {
+		route.Sections[i].Route = &route
 		if i >= len(route.Sections)-1 {
 			break
 		}
-		section.Next = &route.Sections[i+1]
+		route.Sections[i].Next = &route.Sections[i+1]
 	}
 
 	return &route, nil
@@ -155,13 +195,12 @@ func findSectionFromAddress(
 }
 
 // const maxRoutepointsPerRequest int = 860 // May need to set this through configs in the future
-const miToFt float64 = 5280.0
-const mToFt float64 = 3.28084
-const hoursToSeconds float64 = 3600.0
 
-func createRouteFromGpx(gpxRoute *gpx.GPXRoute) (*types.Route, error) {
-	functionErrMsg := errors.New("error creating route")
-	var route types.Route
+func createRouteFromGpxRoute(gpxRoute *gpx.GPXRoute) (*types.Route, error) {
+	route, err := createRouteFromGpxPoints(gpxRoute.Points)
+	if err != nil {
+		return nil, err
+	}
 
 	route.Name = gpxRoute.Name
 	if route.Name == "" {
@@ -173,15 +212,46 @@ func createRouteFromGpx(gpxRoute *gpx.GPXRoute) (*types.Route, error) {
 	route.IsLoop = len(gpxRoute.Name) >= 4 &&
 		gpxRoute.Name[len(gpxRoute.Name)-4:] == "Loop"
 
+	return route, nil
+}
+
+func createRouteFromGpxTrack(gpxTrack *gpx.GPXTrack) (*types.Route, error) {
+	points := []gpx.GPXPoint{}
+	for i := range gpxTrack.Segments {
+		points = append(points, gpxTrack.Segments[i].Points...)
+	}
+
+	route, err := createRouteFromGpxPoints(points)
+	if err != nil {
+		return nil, err
+	}
+
+	route.Name = gpxTrack.Name
+	if route.Name == "" {
+		route.Name = "myroute"
+	}
+
+	// True if the route name ends in "loop"
+	// Add option to set this manually?
+	route.IsLoop = len(gpxTrack.Name) >= 4 &&
+		gpxTrack.Name[len(gpxTrack.Name)-4:] == "Loop"
+
+	return route, nil
+}
+
+func createRouteFromGpxPoints(gpxPoints []gpx.GPXPoint) (*types.Route, error) {
+	functionErrMsg := errors.New("error creating route")
+	var route types.Route
+
 	// Parse routepoints and get data
-	coordinates := make([]types.Coordinates, len(gpxRoute.Points))
-	for i, point := range gpxRoute.Points {
+	coordinates := make([]types.Coordinates, len(gpxPoints))
+	for i, point := range gpxPoints {
 		coordinates[i].Latitude = point.Latitude
 		coordinates[i].Longitude = point.Longitude
 	}
 
 	prevCoordinates := coordinates[0]
-	prevElevation := gpxRoute.Points[0].Elevation.Value() * mToFt
+	prevElevation := gpxPoints[0].Elevation.Value() * mToFt
 
 	// ORS only accepts 50 waypoints per request, so we have to break the request up
 	for currIndex := 0; currIndex < len(coordinates); currIndex += 50 {
@@ -224,7 +294,7 @@ func createRouteFromGpx(gpxRoute *gpx.GPXRoute) (*types.Route, error) {
 				section.ElevationInitialFt = prevElevation
 				section.ElevationFinalFt = findClosestGpxPointToCoordinates(
 					section.CoordinatesFinal,
-					gpxRoute.Points,
+					gpxPoints,
 				).Elevation.Value() * mToFt
 
 				section.ExitInstruction = step.Instruction
@@ -235,6 +305,7 @@ func createRouteFromGpx(gpxRoute *gpx.GPXRoute) (*types.Route, error) {
 				section.SpeedLimitMph = uint(step.Distance / (step.Duration / hoursToSeconds))
 
 				section.PositionInRoute = len(route.Sections)
+				section.Route = &route
 				section.Next = nil
 
 				var prevSection *types.RouteSection = nil
@@ -333,7 +404,8 @@ func writeRouteToFile(route *types.Route, outputFolder string) error {
 		outputFolder = outputFolder[:lastChar]
 	}
 
-	filePath := outputFolder + "/" + route.Name + ".route.json"
+	fileName := removeIllegalFilenameChars(route.Name)
+	filePath := outputFolder + "/" + fileName + ".route.json"
 	file, err := os.Create(filePath)
 	if err != nil {
 		return errors.Join(functionErrMsg, err)
@@ -348,4 +420,14 @@ func writeRouteToFile(route *types.Route, outputFolder string) error {
 	}
 
 	return nil
+}
+
+func removeIllegalFilenameChars(filename string) string {
+	illegalChars := []string{"<", ">", ":", "\"", "/", "\\", "|", "?", "*"}
+
+	for _, char := range illegalChars {
+		filename = strings.ReplaceAll(filename, char, "")
+	}
+
+	return filename
 }
