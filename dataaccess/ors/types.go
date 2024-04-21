@@ -109,7 +109,7 @@ type Segment struct {
 
 type Warning struct {
 	Code    int
-	Message int
+	Message string
 }
 
 type Route struct {
