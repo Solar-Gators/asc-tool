@@ -59,9 +59,9 @@ type Weather struct {
 	CloudCoverPercentage float64
 	WindSpeedMph         float64
 	// 0 degrees is North, 90 degrees is East
-	WindDirectionDegrees        float64
-	RainOnGroundInches          float64
-	SurfacePressureUnknownUnits float64 // TODO: add units
+	WindDirectionDegrees float64
+	RainOnGroundInches   float64
+	SurfacePressurePsi   float64
 }
 
 type Traffic struct {
