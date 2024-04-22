@@ -3,8 +3,10 @@ package dataaccess
 import (
 	"asc-simulation/dataaccess/solcast"
 	"asc-simulation/types"
+	"encoding/json"
 	"errors"
 	"math"
+	"os"
 	"strconv"
 	"time"
 )
@@ -14,9 +16,15 @@ Loads live weather data at the specified section of the route.
 Call DefaultWeatherOptions() to load the default weather options.
 */
 func GetWeather(section *types.RouteSection, options WeatherDataOptions) (*types.Weather, error) {
-	cacheSection := getWeatherCacheSection(section, &options)
-	if cacheSection != nil && cacheSection.weather != nil {
-		return cacheSection.weather, nil
+	cacheSection, err := getWeatherCacheSection(section, &options)
+	if err != nil {
+		// If the JSON Weather cache fails, we do NOT want to make calls to Solcast anyway.
+		// If that happens during an optimization run, the API endpoints could be called
+		// hundreds/thousands of times extra, using up our available API calls.
+		return nil, err
+	}
+	if cacheSection != nil && cacheSection.Weather != nil {
+		return cacheSection.Weather, nil
 	}
 
 	responseInterval := solcast.Period5Mins
@@ -49,19 +57,26 @@ func GetWeather(section *types.RouteSection, options WeatherDataOptions) (*types
 		WindSpeedMph:         msToMph(mostRecentWeather.WindSpeed10m),
 		WindDirectionDegrees: mostRecentWeather.WindDirection10m,
 		RainOnGroundInches:   accumulatedRainfallInches(evaporationRateInputs, precipitationRates, responseInterval),
+		SurfacePressurePsi:   mostRecentWeather.SurfacePressure * hPaToPsi,
 	}
 
 	if options.UsingWeatherCache {
+		key := section.Route.Name
+
 		if cacheSection == nil {
-			key := section.Route.Name
 			weatherCache[key] = createWeatherCacheSectionsForRoute(section.Route)
-			cacheSection = getWeatherCacheSection(section, &options)
+			cacheSection, _ = getWeatherCacheSection(section, &options)
 		}
 
 		now := time.Now()
-		cacheSection.weather = &weather
-		cacheSection.collectedAt = now
-		cacheSection.occursAt = now
+		cacheSection.Weather = &weather
+		cacheSection.CollectedAt = now
+		cacheSection.OccursAt = now
+
+		err = saveWeatherCacheToJson(key, weatherCache[key])
+		if err != nil {
+			return &weather, err
+		}
 	}
 
 	return &weather, nil
@@ -81,9 +96,15 @@ func GetWeatherForecast(
 		return nil, errors.New("cannot get forecast more than 336 hours in the future")
 	}
 
-	cacheSection := getWeatherCacheSection(section, &options)
-	if cacheSection.weather != nil {
-		return cacheSection.weather, nil
+	cacheSection, err := getWeatherCacheSection(section, &options)
+	if err != nil {
+		// If the JSON Weather cache fails, we do NOT want to make calls to Solcast anyway.
+		// If that happens during an optimization run, the API endpoints could be called
+		// hundreds/thousands of times extra, using up our available API calls.
+		return nil, err
+	}
+	if cacheSection != nil && cacheSection.Weather != nil {
+		return cacheSection.Weather, nil
 	}
 
 	responseInterval := solcast.Period5Mins
@@ -117,19 +138,26 @@ func GetWeatherForecast(
 		WindSpeedMph:         msToMph(weatherAtTargetTime.WindSpeed10m),
 		WindDirectionDegrees: weatherAtTargetTime.WindDirection10m,
 		RainOnGroundInches:   accumulatedRainfallInches(evaporationRateInputs, precipitationRates, responseInterval),
+		SurfacePressurePsi:   weatherAtTargetTime.SurfacePressure * hPaToPsi,
 	}
 
 	if options.UsingWeatherCache {
+		key := section.Route.Name
+
 		if cacheSection == nil {
-			key := section.Route.Name
 			weatherCache[key] = createWeatherCacheSectionsForRoute(section.Route)
-			cacheSection = getWeatherCacheSection(section, &options)
+			cacheSection, _ = getWeatherCacheSection(section, &options)
 		}
 
 		now := time.Now()
-		cacheSection.weather = &weather
-		cacheSection.collectedAt = now
-		cacheSection.occursAt = now.Add(time.Duration(hoursInFuture) * time.Hour)
+		cacheSection.Weather = &weather
+		cacheSection.CollectedAt = now
+		cacheSection.OccursAt = now.Add(time.Duration(hoursInFuture) * time.Hour)
+
+		err = saveWeatherCacheToJson(key, weatherCache[key])
+		if err != nil {
+			return &weather, err
+		}
 	}
 
 	return &weather, nil
@@ -169,21 +197,21 @@ func DefaultWeatherDataOptions() WeatherDataOptions {
 }
 
 type weatherCacheSection struct {
-	combinedLengthFt  float64
-	occursAt          time.Time
-	collectedAt       time.Time
-	startSectionIndex int
-	endSectionIndex   int
-	weather           *types.Weather
+	CombinedLengthFt  float64
+	OccursAt          time.Time
+	CollectedAt       time.Time
+	StartSectionIndex int
+	EndSectionIndex   int
+	Weather           *types.Weather
 }
 
 const weatherCacheSectionMinLengthFt float64 = 2 * miToFt
 
 var weatherCache = make(map[string][]weatherCacheSection)
 
-func getWeatherCacheSection(section *types.RouteSection, options *WeatherDataOptions) *weatherCacheSection {
+func getWeatherCacheSection(section *types.RouteSection, options *WeatherDataOptions) (*weatherCacheSection, error) {
 	if !options.UsingWeatherCache {
-		return nil
+		return nil, nil
 	}
 
 	key := section.Route.Name
@@ -191,9 +219,18 @@ func getWeatherCacheSection(section *types.RouteSection, options *WeatherDataOpt
 		key = createDefaultCacheKey(section)
 	}
 
-	weatherCacheSections, exists := weatherCache[key]
-	if !exists {
-		return nil
+	weatherCacheSections, existsInMemory := weatherCache[key]
+	if !existsInMemory {
+		savedCacheSection, err := readWeatherCacheFromJson(key)
+		if err != nil {
+			return nil, err
+		}
+		if savedCacheSection == nil {
+			return nil, nil
+		}
+
+		weatherCache[key] = savedCacheSection
+		weatherCacheSections = weatherCache[key]
 	}
 
 	// Find the corresponding section using binary search
@@ -203,29 +240,29 @@ func getWeatherCacheSection(section *types.RouteSection, options *WeatherDataOpt
 		mid := (left + right) / 2
 		currSection := &weatherCacheSections[mid]
 
-		if section.PositionInRoute >= currSection.startSectionIndex &&
-			section.PositionInRoute <= currSection.endSectionIndex {
+		if section.PositionInRoute >= currSection.StartSectionIndex &&
+			section.PositionInRoute <= currSection.EndSectionIndex {
 
 			cacheSection = currSection
 			break
-		} else if section.PositionInRoute < currSection.startSectionIndex {
+		} else if section.PositionInRoute < currSection.StartSectionIndex {
 			right = mid - 1
-		} else if section.PositionInRoute > currSection.endSectionIndex {
+		} else if section.PositionInRoute > currSection.EndSectionIndex {
 			left = mid + 1
 		}
 	}
 	if cacheSection == nil {
-		return nil
+		return nil, nil
 	}
 
 	duration := time.Duration(options.RefreshTimeSeconds * float64(time.Second))
-	expirationTime := cacheSection.collectedAt.Add(duration)
+	expirationTime := cacheSection.CollectedAt.Add(duration)
 
 	if time.Now().After(expirationTime) {
-		cacheSection.weather = nil
+		cacheSection.Weather = nil
 	}
 
-	return cacheSection
+	return cacheSection, nil
 }
 
 func createDefaultCacheKey(section *types.RouteSection) string {
@@ -248,21 +285,92 @@ func createWeatherCacheSectionsForRoute(route *types.Route) []weatherCacheSectio
 		lastIndex := len(cacheSections) - 1
 
 		if section.PositionInRoute > 0 &&
-			cacheSections[lastIndex].combinedLengthFt < weatherCacheSectionMinLengthFt {
+			cacheSections[lastIndex].CombinedLengthFt < weatherCacheSectionMinLengthFt {
 			// Merge RouteSection into previous WeatherCacheSection
-			cacheSections[lastIndex].combinedLengthFt += section.LengthFt
-			cacheSections[lastIndex].endSectionIndex = section.PositionInRoute
+			cacheSections[lastIndex].CombinedLengthFt += section.LengthFt
+			cacheSections[lastIndex].EndSectionIndex = section.PositionInRoute
 		} else {
 			cacheSections = append(cacheSections, weatherCacheSection{
-				combinedLengthFt:  section.LengthFt,
-				startSectionIndex: section.PositionInRoute,
-				endSectionIndex:   section.PositionInRoute,
-				weather:           nil,
+				CombinedLengthFt:  section.LengthFt,
+				StartSectionIndex: section.PositionInRoute,
+				EndSectionIndex:   section.PositionInRoute,
+				Weather:           nil,
 			})
 		}
 	}
 
 	return cacheSections
+}
+
+func readWeatherCacheFromJson(cacheKey string) ([]weatherCacheSection, error) {
+	functionErrMsg := errors.New("error loading weather from json cache")
+
+	filePath := getWeatherCacheFilePath(cacheKey)
+	file, err := os.Open(filePath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, errors.Join(functionErrMsg, err)
+	}
+	defer file.Close()
+
+	var cacheSections []weatherCacheSection
+
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&cacheSections)
+	if err != nil {
+		return nil, errors.Join(functionErrMsg, err)
+	}
+
+	return cacheSections, nil
+}
+
+func saveWeatherCacheToJson(cacheKey string, cacheSections []weatherCacheSection) error {
+	functionErrMsg := errors.New("error saving weather to json cache")
+
+	outputFolder := getWeatherCacheOutputFolder()
+	err := os.MkdirAll(outputFolder, os.ModePerm)
+	if err != nil {
+		return errors.Join(functionErrMsg, err)
+	}
+
+	filePath := getWeatherCacheFilePath(cacheKey)
+	file, err := os.Create(filePath)
+	if err != nil {
+		return errors.Join(functionErrMsg, err)
+	}
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	err = encoder.Encode(cacheSections)
+	if err != nil {
+		return errors.Join(functionErrMsg, err)
+	}
+
+	return nil
+}
+
+func getWeatherCacheFilePath(cacheKey string) string {
+	outputFolder := getWeatherCacheOutputFolder()
+
+	fileName := removeIllegalFilenameChars(cacheKey)
+	filePath := outputFolder + "/" + fileName + ".json"
+
+	return filePath
+}
+
+func getWeatherCacheOutputFolder() string {
+	outputFolder, _ := os.UserCacheDir()
+
+	// Remove slash from last character of output path
+	lastChar := len(outputFolder) - 1
+	if lastChar > 0 && (outputFolder[lastChar] == '/' || outputFolder[lastChar] == '\\') {
+		outputFolder = outputFolder[:lastChar]
+	}
+	outputFolder += "/asc-tool/weather"
+
+	return outputFolder
 }
 
 type evaporationRateInput struct {
