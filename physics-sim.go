@@ -1,10 +1,12 @@
 package main
 
 import (
-	"fmt"
 	"math"
+	"os"
+	"strconv"
 
 	"asc-simulation/dataaccess"
+	"asc-simulation/types"
 
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
@@ -17,6 +19,7 @@ import (
 const Cells int = 256
 const CellEfficiency float64 = 0.227
 const CellSize float64 = 1046 * 1812 * 0.01 //m^2
+const BatteryVoltage float64 = 48.0         //TODO: replace with real value
 
 func mphToMps(mph float64) float64 {
 	return mph * 0.44704
@@ -26,7 +29,11 @@ func ftToMeters(ft float64) float64 {
 	return ft * 0.3048
 }
 
-func calculateBearing(start Coordinates, end Coordinates) float64 {
+func jtomAh(joules float64) float64 {
+	return joules / (BatteryVoltage * 3600 * 0.01)
+}
+
+func calculateBearing(start types.Coordinates, end types.Coordinates) float64 {
 	lat1 := start.Latitude
 	lon1 := start.Longitude
 	lat2 := end.Latitude
@@ -136,14 +143,13 @@ func outputGraph(inputArr plotter.XYs, fileName string) {
 func calcPhysics(routeName string, battery int, targSpeed int, loopOne int, loopTwo int, cpOneClose string, cpTwoClose string, cpThreeClose string, stageClose string) {
 	//TODO: currently no way to account for checkpoints. As they are provided day of maybe we could take an input parameter as to the position or distance along route of the checkpoint and manage from there?
 
-	maxBatteryCapW := 10000 //TODO: get real number
-
-	currBattery := float64(maxBatteryCapW*battery) * 0.01
-
-	vehicle, err := dataaccess.GetVehicle("vehicle.json")
+	vehicle, err := dataaccess.GetVehicle("vehicle.json") //TODO: Change vehicle constants to values attained from api
 	if err != nil {
 		panic(err)
 	}
+
+	maxBatteryCapmAh := vehicle.BatteryCapacityMilliamps
+	currBatteryCapmAh := maxBatteryCapmAh * (float64(battery) * 0.01)
 
 	route, err := dataaccess.LoadRoute(routeName)
 	if err != nil {
@@ -163,24 +169,43 @@ func calcPhysics(routeName string, battery int, targSpeed int, loopOne int, loop
 	var initialVelo float64 = 0.0
 	currentTickVelo := initialVelo
 
-	facingDirectionRadians := 0.0 //TODO: currently changes in facing direction not implemented, currently estimated by the general direction of the section
+	facingDirectionRadians := 0.0
 	currentTickAccel := 0.0
 
 	prevVelo := initialVelo
+	var deltaTimeS = 0.0 //Graph or output time to traverse
 	var totalEnergyUsed = 0.0
+	var totalEnergyGained = 0.0
 	var maxAccel, minAccel, maxVelo, minVelo float64 = math.Inf(-1), math.Inf(1), math.Inf(-1), targSpeedMps
 
-	for index, section := range route.Sections {
-		weather, err := dataaccess.GetWeather(section, dataaccess.WeatherDataOptions{RefreshRateSeconds: 60}) //TODO implement weather condition calculations
+	//Graphing
+	graphOutput := true
+	var energyUsedPlot plotter.XYs
+	var energyGainedPlot plotter.XYs
+	var veloPlot plotter.XYs
+	var accelPlot plotter.XYs
+	var batteryPlot plotter.XYs
+	var colorOffsetVar = 0.0
+	var trackDrawingVelocities = ""
+
+	//TODO: Handle loops and loop count
+
+	for _, section := range route.Sections {
+		weather, err := dataaccess.GetWeather(&section, dataaccess.WeatherDataOptions{RefreshTimeSeconds: 60}) //TODO: adjust refresh time
 		if err != nil {
 			panic(err)
 		}
 
-		facingDirectionRadians = calculateBearing(section.CoordinatesInitial, section.CoordinatesFinal)
+		traffic, err := dataaccess.GetTraffic(section, dataaccess.TrafficDataOptions{RefreshRateSeconds: 60}) //TODO: adjust refresh rate
+		if err != nil {
+			panic(err)
+		}
+
+		facingDirectionRadians = calculateBearing(section.CoordinatesInitial, section.CoordinatesFinal) // direction estimation for section determined by difference between start and end point
 
 		windSpeed = mphToMps(weather.WindSpeedMph)
 
-		//TODO: replace dummy values for a and b with actual values
+		//TODO: replace dummy values for a and b with actual values. Ask Jack
 		a := 1.0
 		b := 1.0
 		c := currentTickAccel
@@ -189,34 +214,63 @@ func calcPhysics(routeName string, battery int, targSpeed int, loopOne int, loop
 
 		for i := 0.0; i < ftToMeters(section.LengthFt); i += stepDistance {
 			timeToTravel := stepDistance / currentTickVelo
+			deltaTimeS += timeToTravel
 			prevVelo = currentTickVelo
-			currentTickAccel = a*math.Pow(i, 2) + b*i + c
+			currentTickAccel = a*math.Pow(i, 2) + b*i + c //TODO: currently non functional. Need to adapt for asc
 			currentTickVelo += currentTickAccel * timeToTravel
 
 			maxAccel = max(maxAccel, currentTickAccel)
 			minAccel = min(minAccel, currentTickAccel)
-			maxVelo = max(maxVelo, currentTickVelo) //TODO: this should be changed for asc. The max velocity should be the minimum of the target velocity, the speed limit of the section and the flow of traffic.
+			maxVelo = min(max(maxVelo, currentTickVelo), min(mphToMps(traffic.FlowSpeedMph), mphToMps(float64(section.SpeedLimitMph)))) //TODO: not sure this is the correct method of setting the max speed, as before it was allowed to go beyond the "max speed" to take decelleration into account (?). Confirm with Jack
 			minVelo = min(minVelo, currentTickVelo)
 
-			//TODO curvature and centripetal force, is this even possible with how we are storing route data?
+			//TODO: curvature and centripetal force, is this even possible with how we are storing route data?
 
-			var currentTickEnergy = CalculateWorkDone(currentTickVelo, stepDistance, sectionSlope, prevVelo, facingDirectionRadians)
+			var currentTickEnergy = CalculateWorkDone(currentTickVelo, stepDistance, sectionSlope, prevVelo, facingDirectionRadians) //Energy in Joules
 			totalEnergyUsed += currentTickEnergy
 
-			currBattery -= currentTickEnergy
-
 			//energy gain from sun
-			solarEnergySqM := SolarConstant * math.Cos(weather.SolarInclinationAngleDegrees) * stepDistance   // TODO include cloud coverage
-			solarEnergyGain := min(solarEnergySqM*CellSize*float64(Cells)*CellEfficiency, 430*float64(Cells)) //430 is the maximum energy output per solar cell
+			solarEnergySqM := SolarConstant * math.Cos(weather.SolarZenithDegrees) * stepDistance * (1 - (weather.CloudCoverPercentage * 0.01))
+			solarEnergyGain := min(solarEnergySqM*CellSize*float64(Cells)*CellEfficiency, 430*float64(Cells)) //430 is the maximum energy output per solar cell TODO: Fix
 
-			currBattery += solarEnergyGain
+			totalEnergyGained += solarEnergyGain
 
-			//TODO:Graph Output
+			currBatteryPercent := (currBatteryCapmAh - jtomAh(totalEnergyUsed) + jtomAh(totalEnergyGained)) / maxBatteryCapmAh //TODO: ensure this calculation is correct
+
+			if currBatteryPercent <= 0 {
+				//TODO: handle battery death
+			}
+
+			if graphOutput {
+				energyUsedPlot = append(energyUsedPlot, plotter.XY{X: deltaTimeS, Y: totalEnergyUsed})
+				energyGainedPlot = append(energyGainedPlot, plotter.XY{X: deltaTimeS, Y: totalEnergyGained})
+				veloPlot = append(veloPlot, plotter.XY{X: deltaTimeS, Y: currentTickVelo})
+				accelPlot = append(accelPlot, plotter.XY{X: deltaTimeS, Y: currentTickAccel})
+				batteryPlot = append(batteryPlot, plotter.XY{X: deltaTimeS, Y: currBatteryPercent})
+
+			}
+			// if statment only needed to prevent printing final point
+			if graphOutput && colorOffsetVar/totalRouteLength <= 1.0 {
+				//max of 16 units of speed... can change scale later by putting in for denominator
+				const redDivisor = 16
+
+				const blue = 0
+				const green = 0
+				//converts and makes velocity string
+				colorOffsetStr := strconv.FormatFloat(colorOffsetVar/totalRouteLength, 'f', 4, 64)
+
+				trackDrawingVelocities += "<stop offset=\"" + colorOffsetStr + "\" style=\"stop-color:rgb(" + strconv.Itoa(int(math.Round(255*currentTickVelo/redDivisor))) + "," + strconv.Itoa(green) + "," + strconv.Itoa(blue) + ");stop-opacity:1\"/>\n"
+
+				colorOffsetVar += stepDistance
+			}
 		}
-
-		if currBattery <= 0 {
-			fmt.Println("Battery is dead at section", index)
-			break
-		}
+	}
+	if graphOutput {
+		os.MkdirAll("./plots", 0755)
+		outputGraph(energyUsedPlot, "energyUsed.png")
+		outputGraph(energyGainedPlot, "energyGained.png")
+		outputGraph(veloPlot, "velocity.png")
+		outputGraph(accelPlot, "acceleration.png")
+		outputGraph(batteryPlot, "battery.png")
 	}
 }
