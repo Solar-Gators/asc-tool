@@ -235,9 +235,9 @@ func CalcPhysics(routeName string, battery int, targSpeed int, loopName string, 
 
 		//fmt.Println("Calculating for section: ", j+1)
 
-		if j > 50 { //Used to cap number of sections for testing
-			break
-		}
+		//if j > 50 { //Used to cap number of sections for testing
+		//	break
+		//}
 
 		//fmt.Println("Fetching weather and traffic data")
 		weather, err := dataaccess.GetWeather(&section, dataaccess.WeatherDataOptions{UsingWeatherCache: true, RefreshTimeSeconds: 60000000000000000}) //TODO: adjust refresh time
