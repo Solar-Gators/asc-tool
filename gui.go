@@ -4,10 +4,11 @@ package main
 
 import (
 	"fmt"
+	"os/exec"
+
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
-	"os/exec"
 )
 
 func main() {
@@ -52,6 +53,10 @@ func main() {
 	stage_finish_time := widget.NewEntry()
 	stage_finish_time.SetText("18:30")
 
+	label_10 := widget.NewLabel("Start Time (HH:MM):")
+	start_time := widget.NewEntry()
+	start_time.SetText("08:00")
+
 	output_label := widget.NewLabel("Output:")
 	output_label.Hide()
 	output_log := widget.NewLabel("")
@@ -59,11 +64,11 @@ func main() {
 	output_log.TextStyle.Monospace = true
 
 	go_button := widget.NewButton("Go", func() {
-		cmd := exec.Command("./asc-simulation", "calc", route_segment.Selected, starting_battery.Text, max_speed_mph.Text, loop_1_count.Text, loop_2_count.Text, checkpoint_1_time.Text, checkpoint_2_time.Text, checkpoint_3_time.Text, stage_finish_time.Text)
+		cmd := exec.Command("./main.exe", "calc", route_segment.Selected, starting_battery.Text, max_speed_mph.Text, loop_1_count.Text, loop_2_count.Text, start_time.Text, checkpoint_1_time.Text, checkpoint_2_time.Text, checkpoint_3_time.Text, stage_finish_time.Text)
 		output, err := cmd.CombinedOutput()
 
 		if err != nil {
-			fmt.Printf("Error executing command: %s\n", err)
+			fmt.Printf("Error executing command: %s\n", err, cmd.Stderr)
 			return
 		}
 
@@ -79,6 +84,8 @@ func main() {
 		starting_battery,
 		label_3,
 		max_speed_mph,
+		label_10,
+		start_time,
 
 		container.NewHSplit(
 			container.NewHBox(

@@ -1,9 +1,11 @@
-package main
+package phys
 
 import (
+	"fmt"
 	"math"
 	"os"
 	"strconv"
+	"time"
 
 	"asc-simulation/dataaccess"
 	"asc-simulation/types"
@@ -69,6 +71,8 @@ const numTicks = 1000
 // next 3: parabola params
 
 func CalculateWorkDone(velocity float64, step_distance float64, slope float64, prev_velo float64, facing_direction float64) float64 {
+
+	fmt.Print("Starting Physics Simulation\n")
 	const carMassKg = 298.0
 	const dragCoefficient = 0.1275
 	const wheelCircumference = 1.875216
@@ -140,13 +144,21 @@ func outputGraph(inputArr plotter.XYs, fileName string) {
 }
 
 // physics sim should be main program
-func calcPhysics(routeName string, battery int, targSpeed int, loopOne int, loopTwo int, cpOneClose string, cpTwoClose string, cpThreeClose string, stageClose string) {
+func CalcPhysics(routeName string, battery int, targSpeed int, loopOne int, loopTwo int, startTime string, cpOneClose string, cpTwoClose string, cpThreeClose string, stageClose string) {
 	//TODO: currently no way to account for checkpoints. As they are provided day of maybe we could take an input parameter as to the position or distance along route of the checkpoint and manage from there?
 
 	vehicle, err := dataaccess.GetVehicle("vehicle.json") //TODO: Change vehicle constants to values attained from api
 	if err != nil {
 		panic(err)
 	}
+	const timeLayout = "15:04"
+
+	startT, err := time.Parse(timeLayout, startTime)
+	if err != nil {
+		panic(err)
+	}
+	var currTime = startT
+	//TODO: implement acceleration curve
 
 	maxBatteryCapmAh := vehicle.BatteryCapacityMilliamps
 	currBatteryCapmAh := maxBatteryCapmAh * (float64(battery) * 0.01)
@@ -170,6 +182,9 @@ func calcPhysics(routeName string, battery int, targSpeed int, loopOne int, loop
 	currentTickVelo := initialVelo
 
 	facingDirectionRadians := 0.0
+	vehicleAccel := 5.0  //placeholder
+	vehicleDecel := -5.0 //placeholder
+
 	currentTickAccel := 0.0
 
 	prevVelo := initialVelo
@@ -204,24 +219,32 @@ func calcPhysics(routeName string, battery int, targSpeed int, loopOne int, loop
 		facingDirectionRadians = calculateBearing(section.CoordinatesInitial, section.CoordinatesFinal) // direction estimation for section determined by difference between start and end point
 
 		windSpeed = mphToMps(weather.WindSpeedMph)
-
-		//TODO: replace dummy values for a and b with actual values. Ask Jack
-		a := 1.0
-		b := 1.0
-		c := currentTickAccel
+		windDirectionRadians = weather.WindDirectionDegrees * math.Pi / 180
 
 		sectionSlope := (section.ElevationFinalFt - section.ElevationInitialFt) / section.LengthFt
+		sectionMaxSpeed := min(mphToMps(float64(section.SpeedLimitMph)), targSpeedMps)
 
 		for i := 0.0; i < ftToMeters(section.LengthFt); i += stepDistance {
+			currMaxSpeed := min(sectionMaxSpeed, mphToMps(traffic.FlowSpeedMph))
+
 			timeToTravel := stepDistance / currentTickVelo
 			deltaTimeS += timeToTravel
+
+			currTime = currTime.Add(time.Duration(deltaTimeS) * time.Second)
+
 			prevVelo = currentTickVelo
-			currentTickAccel = a*math.Pow(i, 2) + b*i + c //TODO: currently non functional. Need to adapt for asc
+			if currentTickVelo < currMaxSpeed {
+				currentTickAccel = vehicleAccel
+			} else if currentTickVelo > currMaxSpeed {
+				currentTickAccel = vehicleDecel
+			} else {
+				currentTickAccel = 0
+			}
 			currentTickVelo += currentTickAccel * timeToTravel
 
 			maxAccel = max(maxAccel, currentTickAccel)
 			minAccel = min(minAccel, currentTickAccel)
-			maxVelo = min(max(maxVelo, currentTickVelo), min(mphToMps(traffic.FlowSpeedMph), mphToMps(float64(section.SpeedLimitMph)))) //TODO: not sure this is the correct method of setting the max speed, as before it was allowed to go beyond the "max speed" to take decelleration into account (?). Confirm with Jack
+			maxVelo = min(maxVelo, currentTickVelo) //TODO: not sure this is the correct method of setting the max speed, as before it was allowed to go beyond the "max speed" to take decelleration into account (?). Confirm with Jack
 			minVelo = min(minVelo, currentTickVelo)
 
 			//TODO: curvature and centripetal force, is this even possible with how we are storing route data?
@@ -236,10 +259,6 @@ func calcPhysics(routeName string, battery int, targSpeed int, loopOne int, loop
 			totalEnergyGained += solarEnergyGain
 
 			currBatteryPercent := (currBatteryCapmAh - jtomAh(totalEnergyUsed) + jtomAh(totalEnergyGained)) / maxBatteryCapmAh //TODO: ensure this calculation is correct
-
-			if currBatteryPercent <= 0 {
-				//TODO: handle battery death
-			}
 
 			if graphOutput {
 				energyUsedPlot = append(energyUsedPlot, plotter.XY{X: deltaTimeS, Y: totalEnergyUsed})
