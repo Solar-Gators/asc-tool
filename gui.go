@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"fmt"
 	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
 	"io"
@@ -109,6 +110,23 @@ func main() {
 	output_label.Hide()
 	output_label.TextStyle.Monospace = true
 
+	image1 := canvas.NewImageFromFile("./plots/battery.png")
+	image1.FillMode = canvas.ImageFillOriginal
+
+	image2 := canvas.NewImageFromFile("./plots/velocity.png")
+	image2.FillMode = canvas.ImageFillOriginal
+
+	image3 := canvas.NewImageFromFile("./plots/energyUsed.png")
+	image3.FillMode = canvas.ImageFillOriginal
+
+	image4 := canvas.NewImageFromFile("./plots/energyGained.png")
+	image4.FillMode = canvas.ImageFillOriginal
+
+	// image1.Hide()
+	// image3.Hide()
+	// image2.Hide()
+	// image4.Hide()
+
 	go_button := widget.NewButton("Go", func() {
 		to_run := "./main.exe"
 		to_run_2 := "calc"
@@ -144,55 +162,75 @@ func main() {
 		go captureOutput(stderrPipe)
 
 		err = cmd.Wait()
+
+		output_label.Hide()
+		image1.Show()
+		image2.Show()
+		image3.Show()
+		image4.Show()
+
 		if err != nil {
 			fmt.Printf("Command finished with error: %v\n", err)
 		}
 	})
 
-	w.SetContent(container.NewVBox(
-		label_1,
-		route_segment,
-		label_2,
-		starting_battery,
-		to_optimize,
-		label_3,
-		max_speed_mph,
-		label_10,
-		start_time,
+	w.SetContent(
+		container.NewVScroll(
+			container.NewVBox(
+				label_1,
+				route_segment,
+				label_2,
+				starting_battery,
+				to_optimize,
+				label_3,
+				max_speed_mph,
+				label_10,
+				start_time,
 
-		container.NewHSplit(
-			container.NewHBox(
-				label_4,
-				loop_name,
+				container.NewHSplit(
+					container.NewHBox(
+						label_4,
+						loop_name,
+					),
+
+					container.NewHBox(
+						label_5,
+						loop_count,
+					)),
+
+				container.NewHBox(
+					label_6,
+					label_7,
+				),
+
+				container.NewHSplit(
+					checkpoint_1_time,
+					checkpoint_2_time,
+				),
+
+				container.NewHBox(
+					label_8,
+					label_9,
+				),
+
+				container.NewHSplit(
+					checkpoint_3_time,
+					stage_finish_time,
+				),
+				go_button,
+				output_label,
+				container.NewVBox(
+					container.NewHBox(
+						image1,
+						image2,
+					),
+					container.NewHBox(
+						image3,
+						image4,
+					),
+				),
 			),
-
-			container.NewHBox(
-				label_5,
-				loop_count,
-			)),
-
-		container.NewHBox(
-			label_6,
-			label_7,
-		),
-
-		container.NewHSplit(
-			checkpoint_1_time,
-			checkpoint_2_time,
-		),
-
-		container.NewHBox(
-			label_8,
-			label_9,
-		),
-
-		container.NewHSplit(
-			checkpoint_3_time,
-			stage_finish_time,
-		),
-		go_button,
-		output_label,
-	))
+		))
 
 	w.ShowAndRun()
 }
