@@ -4,12 +4,42 @@ package main
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os/exec"
+	"strings"
 
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
 )
+
+var routePath string = "./asc-routes-2024/"
+var routeFileType string = ".route.json"
+
+func generateRouteList() ([]string, []string) {
+	var routeNames []string
+	var loopNames []string
+
+	files, err := ioutil.ReadDir(routePath)
+	if err != nil {
+		fmt.Println("Error reading directory:", err)
+		return routeNames, loopNames
+	}
+
+	for _, file := range files {
+		if !file.IsDir() && strings.HasSuffix(file.Name(), routeFileType) {
+			if file.Name()[1] == 'L' {
+				loopName := strings.TrimSuffix(file.Name(), routeFileType)
+				loopNames = append(loopNames, loopName)
+			} else {
+				routeName := strings.TrimSuffix(file.Name(), routeFileType)
+				routeNames = append(routeNames, routeName)
+			}
+		}
+	}
+
+	return routeNames, loopNames
+}
 
 func main() {
 
@@ -17,9 +47,12 @@ func main() {
 	w := a.NewWindow("ASC Sim")
 
 	label_1 := widget.NewLabel("Route Segment:")
-	route_segment := widget.NewSelect([]string{"Segment-1", "Segment-2"}, func(value string) {
+
+	routeNames, loopNames := generateRouteList()
+
+	route_segment := widget.NewSelect(routeNames, func(value string) {
 	})
-	route_segment.SetSelected("Segment-1")
+	route_segment.SetSelected("")
 
 	label_2 := widget.NewLabel("Starting Battery (%):")
 	starting_battery := widget.NewEntry()
@@ -29,13 +62,14 @@ func main() {
 	max_speed_mph := widget.NewEntry()
 	max_speed_mph.SetText("55")
 
-	label_4 := widget.NewLabel("Loop 1 Count:")
-	loop_1_count := widget.NewEntry()
-	loop_1_count.SetText("1")
+	label_4 := widget.NewLabel("Loop Name:")
+	loop_name := widget.NewSelect(loopNames, func(value string) {
+	})
+	loop_name.SetSelected("")
 
-	label_5 := widget.NewLabel("Loop 2 Count:")
-	loop_2_count := widget.NewEntry()
-	loop_2_count.SetText("1")
+	label_5 := widget.NewLabel("Loop Count:")
+	loop_count := widget.NewEntry()
+	loop_count.SetText("1")
 
 	label_6 := widget.NewLabel("Checkpoint 1 Close Time (HH:MM):")
 	checkpoint_1_time := widget.NewEntry()
@@ -49,7 +83,7 @@ func main() {
 	checkpoint_3_time := widget.NewEntry()
 	checkpoint_3_time.SetText("16:20")
 
-	label_9 := widget.NewLabel("Checkpoint 3 Close Time (HH:MM):")
+	label_9 := widget.NewLabel("Stage Close Time (HH:MM):")
 	stage_finish_time := widget.NewEntry()
 	stage_finish_time.SetText("18:30")
 
@@ -64,7 +98,7 @@ func main() {
 	output_log.TextStyle.Monospace = true
 
 	go_button := widget.NewButton("Go", func() {
-		cmd := exec.Command("./main.exe", "calc", route_segment.Selected, starting_battery.Text, max_speed_mph.Text, loop_1_count.Text, loop_2_count.Text, start_time.Text, checkpoint_1_time.Text, checkpoint_2_time.Text, checkpoint_3_time.Text, stage_finish_time.Text)
+		cmd := exec.Command("./main.exe", "calc", routePath+route_segment.Selected+routeFileType, starting_battery.Text, max_speed_mph.Text, routePath+loop_name.Selected+routeFileType, loop_count.Text, start_time.Text, checkpoint_1_time.Text, checkpoint_2_time.Text, checkpoint_3_time.Text, stage_finish_time.Text)
 		output, err := cmd.CombinedOutput()
 
 		if err != nil {
@@ -90,12 +124,12 @@ func main() {
 		container.NewHSplit(
 			container.NewHBox(
 				label_4,
-				loop_1_count,
+				loop_name,
 			),
 
 			container.NewHBox(
 				label_5,
-				loop_2_count,
+				loop_count,
 			)),
 
 		container.NewHBox(

@@ -21,7 +21,7 @@ import (
 const Cells int = 256
 const CellEfficiency float64 = 0.227
 const CellSize float64 = 1046 * 1812 * 0.01 //m^2
-const BatteryVoltage float64 = 48.0         //TODO: replace with real value
+const BatteryVoltage float64 = 18.0         //TODO: replace with real value
 
 func mphToMps(mph float64) float64 {
 	return mph * 0.44704
@@ -60,7 +60,7 @@ var windDirectionRadians = 0.0
 var windSpeed = 10.0 //placeholder value
 
 // number of points in the graph to compute:
-const numTicks = 1000
+const numTicks = 100
 
 // input arguments:
 // Solver dictates the velo and accel. Sim dicatates energy required to execute and time elasped. Solver constrained by energy, optimized for time.
@@ -144,13 +144,13 @@ func outputGraph(inputArr plotter.XYs, fileName string) {
 }
 
 // physics sim should be main program
-func CalcPhysics(routeName string, battery int, targSpeed int, loopOne int, loopTwo int, startTime string, cpOneClose string, cpTwoClose string, cpThreeClose string, stageClose string) {
+func CalcPhysics(routeName string, battery int, targSpeed int, loopName string, loopCount int, startTime string, cpOneClose string, cpTwoClose string, cpThreeClose string, stageClose string) {
 	//TODO: currently no way to account for checkpoints. As they are provided day of maybe we could take an input parameter as to the position or distance along route of the checkpoint and manage from there?
 
-	vehicle, err := dataaccess.GetVehicle("vehicle.json") //TODO: Change vehicle constants to values attained from api
-	if err != nil {
-		panic(err)
-	}
+	//vehicle, err := dataaccess.GetVehicle("vehicle.json") //TODO: Change vehicle constants to values attained from api
+	//if err != nil {
+	//	panic(err)
+	//}
 	const timeLayout = "15:04"
 
 	startT, err := time.Parse(timeLayout, startTime)
@@ -160,30 +160,40 @@ func CalcPhysics(routeName string, battery int, targSpeed int, loopOne int, loop
 	var currTime = startT
 	//TODO: implement acceleration curve
 
-	maxBatteryCapmAh := vehicle.BatteryCapacityMilliamps
+	//maxBatteryCapmAh := vehicle.BatteryCapacityMilliamps
+	maxBatteryCapmAh := 50000.0 //placeholder
 	currBatteryCapmAh := maxBatteryCapmAh * (float64(battery) * 0.01)
 
 	route, err := dataaccess.LoadRoute(routeName)
 	if err != nil {
 		panic(err)
 	}
+	fmt.Println("Route loaded")
+
+	loop, err := dataaccess.LoadRoute(loopName)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println("Loop loaded")
 
 	//create step distance to calculate over from the total route length and tick count
 	totalRouteLength := 0.0
 	for _, section := range route.Sections {
 		totalRouteLength = ftToMeters(section.LengthFt)
 	}
+
+	//each step is 1/numticks the length of the whole route
 	var stepDistance float64 = 1 / float64(numTicks)
 	stepDistance *= totalRouteLength
 
 	targSpeedMps := mphToMps(float64(targSpeed))
 	//For each section we begin at a complete stop, thus initial velocity and acceleration are 0
-	var initialVelo float64 = 0.0
+	var initialVelo float64 = 0.1
 	currentTickVelo := initialVelo
 
 	facingDirectionRadians := 0.0
-	vehicleAccel := 5.0  //placeholder
-	vehicleDecel := -5.0 //placeholder
+	vehicleAccel := 1.0   //placeholder
+	vehicleDecel := -10.0 //placeholder
 
 	currentTickAccel := 0.0
 
@@ -205,16 +215,32 @@ func CalcPhysics(routeName string, battery int, targSpeed int, loopOne int, loop
 
 	//TODO: Handle loops and loop count
 
-	for _, section := range route.Sections {
+	fmt.Println("Starting simulation")
+
+	sectionsWithLoops := route.Sections
+
+	//Add Loops
+	for i := 0; i < loopCount; i++ {
+		sectionsWithLoops = append(sectionsWithLoops, loop.Sections...)
+	}
+
+	for j, section := range sectionsWithLoops {
+		fmt.Println("Calculating for section: ", j+1)
+
+		//if j > 5 { Use to cap number of sections for testing
+		//	break
+		//}
+
+		fmt.Println("Fetching weather and traffic data")
 		weather, err := dataaccess.GetWeather(&section, dataaccess.WeatherDataOptions{RefreshTimeSeconds: 60}) //TODO: adjust refresh time
 		if err != nil {
 			panic(err)
 		}
 
-		traffic, err := dataaccess.GetTraffic(section, dataaccess.TrafficDataOptions{RefreshRateSeconds: 60}) //TODO: adjust refresh rate
-		if err != nil {
-			panic(err)
-		}
+		//traffic, err := dataaccess.GetTraffic(section, dataaccess.TrafficDataOptions{RefreshRateSeconds: 60}) //TODO: adjust refresh rate
+		//if err != nil {
+		//	panic(err)
+		//}
 
 		facingDirectionRadians = calculateBearing(section.CoordinatesInitial, section.CoordinatesFinal) // direction estimation for section determined by difference between start and end point
 
@@ -225,13 +251,16 @@ func CalcPhysics(routeName string, battery int, targSpeed int, loopOne int, loop
 		sectionMaxSpeed := min(mphToMps(float64(section.SpeedLimitMph)), targSpeedMps)
 
 		for i := 0.0; i < ftToMeters(section.LengthFt); i += stepDistance {
-			currMaxSpeed := min(sectionMaxSpeed, mphToMps(traffic.FlowSpeedMph))
+			fmt.Println("Calculating for subsection: ", i)
+			currMaxSpeed := min(sectionMaxSpeed, mphToMps(26.8))
 
 			timeToTravel := stepDistance / currentTickVelo
 			deltaTimeS += timeToTravel
 
+			fmt.Println("Calculating time")
 			currTime = currTime.Add(time.Duration(deltaTimeS) * time.Second)
 
+			fmt.Println("Calculating velocity and acceleration")
 			prevVelo = currentTickVelo
 			if currentTickVelo < currMaxSpeed {
 				currentTickAccel = vehicleAccel
@@ -241,6 +270,7 @@ func CalcPhysics(routeName string, battery int, targSpeed int, loopOne int, loop
 				currentTickAccel = 0
 			}
 			currentTickVelo += currentTickAccel * timeToTravel
+			fmt.Println("currentTickVelo: ", currentTickVelo)
 
 			maxAccel = max(maxAccel, currentTickAccel)
 			minAccel = min(minAccel, currentTickAccel)
@@ -248,16 +278,22 @@ func CalcPhysics(routeName string, battery int, targSpeed int, loopOne int, loop
 			minVelo = min(minVelo, currentTickVelo)
 
 			//TODO: curvature and centripetal force, is this even possible with how we are storing route data?
-
 			var currentTickEnergy = CalculateWorkDone(currentTickVelo, stepDistance, sectionSlope, prevVelo, facingDirectionRadians) //Energy in Joules
-			totalEnergyUsed += currentTickEnergy
+			if currentTickEnergy > 0 {
+				totalEnergyUsed += currentTickEnergy
+			}
+			fmt.Println("energy used: ", totalEnergyUsed)
 
 			//energy gain from sun
-			solarEnergySqM := SolarConstant * math.Cos(weather.SolarZenithDegrees) * stepDistance * (1 - (weather.CloudCoverPercentage * 0.01))
+			solarEnergySqM := SolarConstant * stepDistance * (1 - (weather.CloudCoverPercentage * 0.01))
 			solarEnergyGain := min(solarEnergySqM*CellSize*float64(Cells)*CellEfficiency, 430*float64(Cells)) //430 is the maximum energy output per solar cell TODO: Fix
 
-			totalEnergyGained += solarEnergyGain
+			if solarEnergyGain > 0 {
+				totalEnergyGained += solarEnergyGain
+			}
+			fmt.Println("energy gained: ", totalEnergyGained)
 
+			fmt.Println("Calculating battery %")
 			currBatteryPercent := (currBatteryCapmAh - jtomAh(totalEnergyUsed) + jtomAh(totalEnergyGained)) / maxBatteryCapmAh //TODO: ensure this calculation is correct
 
 			if graphOutput {
@@ -286,10 +322,10 @@ func CalcPhysics(routeName string, battery int, targSpeed int, loopOne int, loop
 	}
 	if graphOutput {
 		os.MkdirAll("./plots", 0755)
-		outputGraph(energyUsedPlot, "energyUsed.png")
-		outputGraph(energyGainedPlot, "energyGained.png")
-		outputGraph(veloPlot, "velocity.png")
-		outputGraph(accelPlot, "acceleration.png")
-		outputGraph(batteryPlot, "battery.png")
+		outputGraph(energyUsedPlot, "./plots/energyUsed.png")
+		outputGraph(energyGainedPlot, "./plots/energyGained.png")
+		outputGraph(veloPlot, "./plots/velocity.png")
+		outputGraph(accelPlot, "./plots/acceleration.png")
+		outputGraph(batteryPlot, "./plots/battery.png")
 	}
 }

@@ -23,8 +23,8 @@ var calcCmd = &cobra.Command{
     - Name of route segment
     - Initial battery %
     - Max Target Speed (mph)
-    - Loop 1 count
-    - Loop 2 count
+    - Loop Name
+    - Loop count
     - Start Time (HH:MM)
     - Checkpoint 1 close time (HH:MM)
     - Checkpoint 2 close time (HH:MM)
@@ -44,11 +44,9 @@ var calcCmd = &cobra.Command{
 		if err != nil {
 			panic("Target Speed must be an integer, not: '" + args[2] + "'")
 		}
-		loopOne, err := strconv.Atoi(args[3])
-		if err != nil {
-			panic("Loop 1 must be an integer, not: '" + args[3] + "'")
-		}
-		loopTwo, err := strconv.Atoi(args[4])
+		loopName := args[3]
+
+		loopCount, err := strconv.Atoi(args[4])
 		if err != nil {
 			panic("Loop 2 must be an integer, not: '" + args[4] + "'")
 		}
@@ -66,7 +64,7 @@ var calcCmd = &cobra.Command{
 			}
 		}
 		fmt.Println("Calculating...")
-		phys.CalcPhysics(routeSeg, battery, targSpeed, loopOne, loopTwo, startTime, cpOneClose, cpTwoClose, cpThreeClose, stageClose)
+		phys.CalcPhysics(routeSeg, battery, targSpeed, loopName, loopCount, startTime, cpOneClose, cpTwoClose, cpThreeClose, stageClose)
 	},
 }
 
