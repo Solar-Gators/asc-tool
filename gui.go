@@ -18,12 +18,11 @@ import (
 var routePath string = "./asc-routes-2024/"
 var routeFileType string = ".route.json"
 
-func captureOutput(r io.ReadCloser) {
+func captureOutput(r io.ReadCloser, l *widget.Label) {
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		line := scanner.Text()
-		// Log or print the output line
-		fmt.Println(line)
+		l.SetText(line)
 	}
 	if err := scanner.Err(); err != nil {
 		fmt.Printf("Error reading from pipe: %v\n", err)
@@ -106,9 +105,13 @@ func main() {
 	start_time := widget.NewEntry()
 	start_time.SetText("08:00")
 
-	output_label := widget.NewLabel("Simulation started. See CLI to track progress.")
+	output_label := widget.NewLabel("Calculating...")
 	output_label.Hide()
 	output_label.TextStyle.Monospace = true
+
+	output_text := widget.NewLabel("")
+	output_text.Hide()
+	output_text.TextStyle.Monospace = true
 
 	image1 := canvas.NewImageFromFile("./plots/battery.png")
 	image1.FillMode = canvas.ImageFillOriginal
@@ -122,10 +125,10 @@ func main() {
 	image4 := canvas.NewImageFromFile("./plots/energyGained.png")
 	image4.FillMode = canvas.ImageFillOriginal
 
-	// image1.Hide()
-	// image3.Hide()
-	// image2.Hide()
-	// image4.Hide()
+	image1.Hide()
+	image3.Hide()
+	image2.Hide()
+	image4.Hide()
 
 	go_button := widget.NewButton("Go", func() {
 		to_run := "./main.exe"
@@ -134,8 +137,6 @@ func main() {
 			to_run = "./mystic_venv/bin/python"
 			to_run_2 = "./optimizer.py"
 		}
-
-		output_label.Show()
 
 		cmd := exec.Command(to_run, to_run_2, routePath+route_segment.Selected+routeFileType, starting_battery.Text, max_speed_mph.Text, routePath+loop_name.Selected+routeFileType, loop_count.Text, start_time.Text, checkpoint_1_time.Text, checkpoint_2_time.Text, checkpoint_3_time.Text, stage_finish_time.Text)
 
@@ -158,12 +159,14 @@ func main() {
 			return
 		}
 
-		go captureOutput(stdoutPipe)
-		go captureOutput(stderrPipe)
+		go captureOutput(stdoutPipe, output_text)
+		go captureOutput(stderrPipe, output_text)
+
+		output_label.Show()
+		output_text.Show()
 
 		err = cmd.Wait()
 
-		output_label.Hide()
 		image1.Show()
 		image2.Show()
 		image3.Show()
@@ -219,6 +222,7 @@ func main() {
 				),
 				go_button,
 				output_label,
+				output_text,
 				container.NewVBox(
 					container.NewHBox(
 						image1,

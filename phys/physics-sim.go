@@ -231,7 +231,7 @@ func CalcPhysics(routeName string, battery int, targSpeed int, loopName string, 
 	for j, section := range sectionsWithLoops {
 
 		loadString := `-\|/`
-		fmt.Printf("\r%c Section: %d / %d", loadString[j%4], j+1, len(sectionsWithLoops))
+		fmt.Printf("\n%c Section: %d / %d", loadString[j%4], j+1, len(sectionsWithLoops))
 
 		//fmt.Println("Calculating for section: ", j+1)
 
