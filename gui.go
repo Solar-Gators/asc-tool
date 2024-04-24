@@ -150,6 +150,16 @@ func main() {
 
 		cmd := exec.Command(to_run, to_run_2, routePath+route_segment.Selected+routeFileType, starting_battery.Text, max_speed_mph.Text, routePath+loop_name.Selected+routeFileType, loop_count.Text, start_time.Text, checkpoint_1_time.Text, checkpoint_2_time.Text, checkpoint_3_time.Text, stage_finish_time.Text)
 
+		image1.Hide()
+		image3.Hide()
+		image2.Hide()
+		image4.Hide()
+
+		label_i_1.Hide()
+		label_i_2.Hide()
+		label_i_3.Hide()
+		label_i_4.Hide()
+
 		stdoutPipe, err := cmd.StdoutPipe()
 		if err != nil {
 			fmt.Printf("Error obtaining stdout: %s\n", err)
