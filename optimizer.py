@@ -18,18 +18,19 @@ MAX_CENTRIPETAL_ALLOWED = 3.0  # m/s^2
 
 cli_program = "./asc-simulation.exe"
 
-
 args = sys.argv
 
 args.pop(0)
 
-test = [cli_program] + ["calc"] + list(map(str, args))
+cli_cmd = [cli_program] + ["calc"] + list(map(str, args))
 print(" ".join(map(str, test)))
 
 
 def call_cli_program(x):
+    cli_cmd[4] = x[0]
+    cli_cmd[6] = x[1]
     return subprocess.run(
-        test,
+        cli_cmd,
         capture_output=True,
         text=True,
     ).stdout
@@ -99,13 +100,8 @@ def objective(strategy_to_test):
 # Initialization
 mon = VerboseMonitor(10, 50)
 
-loop_count = 1
-
-lower = [0.0]
-upper = [65.0]
-for i in range(0, loop_count):
-    lower.append(0)
-    upper.append(5)
+lower = [0.0, 0]
+upper = [65.0, 5]
 
 # Configure and solve using LatticeSolver
 solver = BuckshotSolver(2)

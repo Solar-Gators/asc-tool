@@ -1,20 +1,33 @@
-//go:build main2
+//tgo:build main2
 
 package main
 
 import (
+	"bufio"
 	"fmt"
-	"io/ioutil"
-	"os/exec"
-	"strings"
-
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
+	"io"
+	"io/ioutil"
+	"os/exec"
+	"strings"
 )
 
 var routePath string = "./asc-routes-2024/"
 var routeFileType string = ".route.json"
+
+func captureOutput(r io.ReadCloser) {
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := scanner.Text()
+		// Log or print the output line
+		fmt.Println(line)
+	}
+	if err := scanner.Err(); err != nil {
+		fmt.Printf("Error reading from pipe: %v\n", err)
+	}
+}
 
 func generateRouteList() ([]string, []string) {
 	var routeNames []string
@@ -106,16 +119,33 @@ func main() {
 			to_run_2 = "./optimizer.py"
 		}
 		cmd := exec.Command(to_run, to_run_2, routePath+route_segment.Selected+routeFileType, starting_battery.Text, max_speed_mph.Text, routePath+loop_name.Selected+routeFileType, loop_count.Text, start_time.Text, checkpoint_1_time.Text, checkpoint_2_time.Text, checkpoint_3_time.Text, stage_finish_time.Text)
-		output, err := cmd.CombinedOutput()
 
+		stdoutPipe, err := cmd.StdoutPipe()
 		if err != nil {
-			fmt.Printf("Error executing command: %s\n", err, cmd.Stderr)
+			fmt.Printf("Error obtaining stdout: %s\n", err)
 			return
 		}
 
-		output_log.SetText(string(output))
-		output_label.Show()
-		output_log.Show()
+		// Getting the pipe for standard error
+		stderrPipe, err := cmd.StderrPipe()
+		if err != nil {
+			fmt.Printf("Error obtaining stderr: %s\n", err)
+			return
+		}
+
+		// Start the command
+		if err := cmd.Start(); err != nil {
+			fmt.Printf("Error starting command: %s\n", err)
+			return
+		}
+
+		go captureOutput(stdoutPipe)
+		go captureOutput(stderrPipe)
+
+		err = cmd.Wait()
+		if err != nil {
+			fmt.Printf("Command finished with error: %v\n", err)
+		}
 	})
 
 	w.SetContent(container.NewVBox(
