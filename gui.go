@@ -1,4 +1,4 @@
-//tgo:build main2
+//go:build main2
 
 package main
 
@@ -105,11 +105,9 @@ func main() {
 	start_time := widget.NewEntry()
 	start_time.SetText("08:00")
 
-	output_label := widget.NewLabel("Output:")
+	output_label := widget.NewLabel("Simulation started. See CLI to track progress.")
 	output_label.Hide()
-	output_log := widget.NewLabel("")
-	output_log.Hide()
-	output_log.TextStyle.Monospace = true
+	output_label.TextStyle.Monospace = true
 
 	go_button := widget.NewButton("Go", func() {
 		to_run := "./main.exe"
@@ -118,6 +116,9 @@ func main() {
 			to_run = "./mystic_venv/bin/python"
 			to_run_2 = "./optimizer.py"
 		}
+
+		output_label.Show()
+
 		cmd := exec.Command(to_run, to_run_2, routePath+route_segment.Selected+routeFileType, starting_battery.Text, max_speed_mph.Text, routePath+loop_name.Selected+routeFileType, loop_count.Text, start_time.Text, checkpoint_1_time.Text, checkpoint_2_time.Text, checkpoint_3_time.Text, stage_finish_time.Text)
 
 		stdoutPipe, err := cmd.StdoutPipe()
@@ -191,7 +192,6 @@ func main() {
 		),
 		go_button,
 		output_label,
-		output_log,
 	))
 
 	w.ShowAndRun()
