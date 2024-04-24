@@ -16,32 +16,23 @@ MAX_DECCELERATION_ALLOWED = -2.0
 MAX_ENERGY_CONS = 1300
 MAX_CENTRIPETAL_ALLOWED = 3.0  # m/s^2
 
-try:
-    subprocess.run(["go", "build", "."])
-except:
-    print("Ensure Go is installed! Using binaries...\n")
-
-if platform.system() == "Windows":
-    cli_program = "./strategy-simulation.exe"
-else:
-    cli_program = "./strategy-simulation"
+cli_program = "./asc-simulation.exe"
 
 
-def call_cli_program(x, endArg):
+args = sys.argv
+
+args.pop(0)
+
+test = [cli_program] + ["calc"] + list(map(str, args))
+print(" ".join(map(str, test)))
+
+
+def call_cli_program(x):
     return subprocess.run(
-        [cli_program] + list(map(str, x)) + [str(endArg)],
+        test,
         capture_output=True,
         text=True,
     ).stdout
-
-
-def get_expected_argument_count():
-    output = subprocess.run([cli_program], capture_output=True, text=True).stdout
-    try:
-        return int(output.split("Expected argument count:")[1].split("\n")[0])
-    except (IndexError, ValueError):
-        print("Could not determine the expected argument count from the CLI program.")
-        sys.exit(1)
 
 
 output_cache = {}
@@ -49,14 +40,9 @@ i = 0
 
 
 def get_output(x):
-    global i
-    autoEndArg = (
-        "" if CALLS_BETWEEN_IMAGE != 0 and i % CALLS_BETWEEN_IMAGE == 0 else "none"
-    )
-    i += 1
     x_tuple = tuple(x)
     if x_tuple not in output_cache:
-        output_cache[x_tuple] = call_cli_program(x, autoEndArg)
+        output_cache[x_tuple] = call_cli_program(x)
     return output_cache[x_tuple]
 
 
@@ -111,22 +97,18 @@ def objective(strategy_to_test):
 
 
 # Initialization
-expected_args = get_expected_argument_count()
-npts = 50  # Number of points in the lattice (adjust based on problem size)
 mon = VerboseMonitor(10, 50)
 
+loop_count = 1
 
-lower = [0.0, -2.0]
-upper = [30.0, 3.0]
-for i in range(1, expected_args // 2):
-    lower.append(-0.1)
-    upper.append(0.1)
-
-    lower.append(-30.0)
-    upper.append(30.0)
+lower = [0.0]
+upper = [65.0]
+for i in range(0, loop_count):
+    lower.append(0)
+    upper.append(5)
 
 # Configure and solve using LatticeSolver
-solver = SparsitySolver(expected_args)
+solver = BuckshotSolver(2)
 solver.SetGenerationMonitor(mon)
 solver.SetStrictRanges(lower, upper)
 solver.SetEvaluationLimits(10000000, 10000000)

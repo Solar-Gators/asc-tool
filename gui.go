@@ -47,16 +47,17 @@ func main() {
 	w := a.NewWindow("ASC Sim")
 
 	label_1 := widget.NewLabel("Route Segment:")
-
 	routeNames, loopNames := generateRouteList()
 
 	route_segment := widget.NewSelect(routeNames, func(value string) {
 	})
-	route_segment.SetSelected("")
+	route_segment.SetSelectedIndex(0)
 
 	label_2 := widget.NewLabel("Starting Battery (%):")
 	starting_battery := widget.NewEntry()
 	starting_battery.SetText("100")
+
+	to_optimize := widget.NewCheck("Optimize speed", func(value bool) {})
 
 	label_3 := widget.NewLabel("Max Speed (mph):")
 	max_speed_mph := widget.NewEntry()
@@ -65,7 +66,7 @@ func main() {
 	label_4 := widget.NewLabel("Loop Name:")
 	loop_name := widget.NewSelect(loopNames, func(value string) {
 	})
-	loop_name.SetSelected("")
+	loop_name.SetSelectedIndex(0)
 
 	label_5 := widget.NewLabel("Loop Count:")
 	loop_count := widget.NewEntry()
@@ -98,7 +99,13 @@ func main() {
 	output_log.TextStyle.Monospace = true
 
 	go_button := widget.NewButton("Go", func() {
-		cmd := exec.Command("./main.exe", "calc", routePath+route_segment.Selected+routeFileType, starting_battery.Text, max_speed_mph.Text, routePath+loop_name.Selected+routeFileType, loop_count.Text, start_time.Text, checkpoint_1_time.Text, checkpoint_2_time.Text, checkpoint_3_time.Text, stage_finish_time.Text)
+		to_run := "./main.exe"
+		to_run_2 := "calc"
+		if to_optimize.Checked {
+			to_run = "./mystic_venv/bin/python"
+			to_run_2 = "./optimizer.py"
+		}
+		cmd := exec.Command(to_run, to_run_2, routePath+route_segment.Selected+routeFileType, starting_battery.Text, max_speed_mph.Text, routePath+loop_name.Selected+routeFileType, loop_count.Text, start_time.Text, checkpoint_1_time.Text, checkpoint_2_time.Text, checkpoint_3_time.Text, stage_finish_time.Text)
 		output, err := cmd.CombinedOutput()
 
 		if err != nil {
@@ -116,6 +123,7 @@ func main() {
 		route_segment,
 		label_2,
 		starting_battery,
+		to_optimize,
 		label_3,
 		max_speed_mph,
 		label_10,
