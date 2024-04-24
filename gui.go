@@ -125,10 +125,20 @@ func main() {
 	image4 := canvas.NewImageFromFile("./plots/energyGained.png")
 	image4.FillMode = canvas.ImageFillOriginal
 
+	label_i_1 := widget.NewLabel("Battery")
+	label_i_2 := widget.NewLabel("Velocity")
+	label_i_3 := widget.NewLabel("Energy Used")
+	label_i_4 := widget.NewLabel("Energy Gained")
+
 	image1.Hide()
 	image3.Hide()
 	image2.Hide()
 	image4.Hide()
+
+	label_i_1.Hide()
+	label_i_2.Hide()
+	label_i_3.Hide()
+	label_i_4.Hide()
 
 	go_button := widget.NewButton("Go", func() {
 		to_run := "./main.exe"
@@ -167,10 +177,20 @@ func main() {
 
 		err = cmd.Wait()
 
+		image1.Refresh()
+		image2.Refresh()
+		image3.Refresh()
+		image4.Refresh()
+
 		image1.Show()
 		image2.Show()
 		image3.Show()
 		image4.Show()
+
+		label_i_1.Show()
+		label_i_2.Show()
+		label_i_3.Show()
+		label_i_4.Show()
 
 		if err != nil {
 			fmt.Printf("Command finished with error: %v\n", err)
@@ -225,12 +245,24 @@ func main() {
 				output_text,
 				container.NewVBox(
 					container.NewHBox(
-						image1,
-						image2,
+						container.NewVBox(
+							label_i_1,
+							image1,
+						),
+						container.NewVBox(
+							label_i_2,
+							image2,
+						),
 					),
 					container.NewHBox(
-						image3,
-						image4,
+						container.NewVBox(
+							label_i_3,
+							image3,
+						),
+						container.NewVBox(
+							label_i_4,
+							image4,
+						),
 					),
 				),
 			),

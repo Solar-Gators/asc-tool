@@ -311,7 +311,7 @@ func CalcPhysics(routeName string, battery int, targSpeed int, loopName string, 
 			//fmt.Println("Total Energy used: ", totalEnergyUsed, "J")
 
 			//energy gain from sun
-			instantaneousPower := min(430, SolarConstant*max(0, math.Cos(weather.SolarZenithDegrees*math.Pi/180))*CellEfficiency*(1-(weather.CloudCoverPercentage*0.01))*CellSize) * float64(Cells) * 0.005 //Does not take into account changes in voltage / current from the system or from working in series
+			instantaneousPower := min(430, SolarConstant*max(0, math.Cos(weather.SolarZenithDegrees*math.Pi/180))*CellEfficiency*(1-(weather.CloudCoverPercentage*0.01))*CellSize) * float64(Cells) * 0.00000000003 //Does not take into account changes in voltage / current from the system or from working in series
 			solarEnergyGain := instantaneousPower * timeToTravel
 
 			//fmt.Println("Instantaneous Power: ", instantaneousPower, "W")
